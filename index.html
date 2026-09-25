@@ -305,7 +305,7 @@ body.busy .feed-wrap::after{animation:none}
 <main class='wrap'>
   <section class='cam'>
     <div class='feed-wrap'>
-      <img id='feed' src='/video_feed' alt='camera'>
+      <img id='feed' src='/api/video_feed' alt='camera'>
       <div class='banner' id='banner'>Choose round count</div>
       <div class='overlay' id='overlay'><div class='spinner'></div><div id='overlay-txt'>Working…</div></div>
       <div class='coin-overlay' id='coin-overlay'>
@@ -357,7 +357,6 @@ body.busy .feed-wrap::after{animation:none}
   </section>
 </main>
 
-<!-- Deck modal -->
 <div class='deck-modal' id='deck-modal'>
   <div class='deck-content'>
     <div class='deck-header'>
@@ -377,7 +376,6 @@ body.busy .feed-wrap::after{animation:none}
   </div>
 </div>
 
-<!-- Model / Settings modal -->
 <div class='settings-modal' id='settings-modal'>
   <div class='settings-content'>
     <div class='settings-header'>
@@ -397,6 +395,7 @@ body.busy .feed-wrap::after{animation:none}
 </div>
 
 <script>
+const API_BASE = '/api';
 const FULL={nk:'Natural Killer',ab:'Antibody',tc:'T Cell',mp:'Macrophage',np:'Neutrophil',flu:'Flu',tb:'Tuberculosis',mal:'Malaria',rw:'Ringworm',sal:'Salmonella',phg:'Bacteriophage',abx:'Antibiotics',res:'Antibiotic Resistance',sbg:'Superbug'};
 const SIDE={nk:'immune',ab:'immune',tc:'immune',mp:'immune',np:'immune',flu:'disease',tb:'disease',mal:'disease',rw:'disease',sal:'disease',phg:'immune',abx:'immune',res:'disease',sbg:'disease'};
 const $=id=>document.getElementById(id);
@@ -449,7 +448,7 @@ async function awaitJob(jobId, onText, opts){
     await new Promise(r => setTimeout(r, interval));
     let j;
     try {
-      const r = await fetch('/llm_status?job=' + encodeURIComponent(jobId));
+      const r = await fetch(API_BASE + '/llm_status?job=' + encodeURIComponent(jobId));
       if (r.status === 404) { return; }
       j = await r.json();
     } catch (e) { continue; }
@@ -692,7 +691,7 @@ async function openDeck(){
   modal.classList.add('on');
 
   try{
-    const r=await fetch('/deck');
+    const r=await fetch(API_BASE + '/deck');
     const d=await r.json();
 
     availDiv.innerHTML='';
@@ -722,8 +721,8 @@ async function learnAction(){
   if(!S)return;
   const ph=S.phase;
   let url=null, pickUrl=null, role=null;
-  if(ph==='setup_p1'||ph==='setup_p2'){ url='/learn_setup'; pickUrl='/pick_setup'; role='setup'; }
-  else if(ph==='wild_p1'||ph==='wild_p2'){ url='/learn_wild'; pickUrl='/pick_wild'; role='wild'; }
+  if(ph==='setup_p1'||ph==='setup_p2'){ url=API_BASE + '/learn_setup'; pickUrl=API_BASE + '/pick_setup'; role='setup'; }
+  else if(ph==='wild_p1'||ph==='wild_p2'){ url=API_BASE + '/learn_wild'; pickUrl=API_BASE + '/pick_wild'; role='wild'; }
   if(!url)return;
 
   showOverlay('Scanning…');
@@ -774,7 +773,7 @@ async function scanPlayAction(){
   showOverlay('Scanning…');
   const cl=thinking('Scanning…');
   try{
-    const r=await fetchWithTimeout('/scan_play',{method:'POST',
+    const r=await fetchWithTimeout(API_BASE + '/scan_play',{method:'POST',
       headers:{'Content-Type':'application/json'},
       body:JSON.stringify({})
     });
@@ -784,7 +783,7 @@ async function scanPlayAction(){
       if(d.needs_manual && d.available){
         showPicker(d.available, async (short)=>{
           try{
-            const rr=await fetchWithTimeout('/pick_play',{method:'POST',headers:{'Content-Type':'application/json'},
+            const rr=await fetchWithTimeout(API_BASE + '/pick_play',{method:'POST',headers:{'Content-Type':'application/json'},
               body:JSON.stringify({card_name:short})});
             const dd=await rr.json();
             if(dd.state){S=dd.state;render()}
@@ -816,7 +815,7 @@ async function battleAction(){
   showOverlay('Battling…');
   const cl=thinking('Resolving battle…');
   try{
-    const r=await fetchWithTimeout('/battle',{method:'POST'});
+    const r=await fetchWithTimeout(API_BASE + '/battle',{method:'POST'});
     const d=await r.json();cl();hideOverlay();
     if(d.needs_target){
       showTargetPicker(d.targets);
@@ -850,7 +849,7 @@ function showTargetPicker(targets){
       showOverlay('Resolving…');
       const cl=thinking('Resolving Bacteriophage…');
       try{
-        const r = await fetchWithTimeout('/choose_target',{method:'POST',headers:{'Content-Type':'application/json'},
+        const r = await fetchWithTimeout(API_BASE + '/choose_target',{method:'POST',headers:{'Content-Type':'application/json'},
           body:JSON.stringify({card_name:t.short})});
         const d = await r.json();
         cl(); hideOverlay();
@@ -892,7 +891,7 @@ async function toggleWild(player){
   const current = player==='p1' ? S.p1_wild_toggle : S.p2_wild_toggle;
   const playerSide = player==='p1' ? S.p1_side : S.p2_side;
   try{
-    const r=await fetchWithTimeout('/toggle_wild',{method:'POST',headers:{'Content-Type':'application/json'},
+    const r=await fetchWithTimeout(API_BASE + '/toggle_wild',{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({player, on: !current})});
     const d=await r.json();
     if(d.ok){
@@ -909,7 +908,7 @@ bBattle.onclick = battleAction;
 bReset.onclick=async()=>{
   abortAll(); flipRevealed = false; showOverlay('Resetting…');
   try{
-    const r=await fetchWithTimeout('/reset',{method:'POST'});const d=await r.json();hideOverlay();
+    const r=await fetchWithTimeout(API_BASE + '/reset',{method:'POST'});const d=await r.json();hideOverlay();
     if(d.state){S=d.state;render();addPlain(d.note||'Reset.','system')}
   }catch(e){hideOverlay();addPlain('Server error: '+e,'warn')}
 };
@@ -918,7 +917,7 @@ bStart.onclick=async()=>{
   bStart.disabled = true;
   flipRevealed = false;
   try{
-    const r=await fetchWithTimeout('/pick_rounds',{method:'POST',headers:{'Content-Type':'application/json'},
+    const r=await fetchWithTimeout(API_BASE + '/pick_rounds',{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({rounds:chosenRounds})});
     const d=await r.json();
     if(d.error){addPlain(d.error,'warn');bStart.disabled=false;return}
@@ -932,7 +931,7 @@ bStart.onclick=async()=>{
 $('b-play-again').onclick=async()=>{
   abortAll(); flipRevealed = false;
   try{
-    const r=await fetchWithTimeout('/reset',{method:'POST'});const d=await r.json();
+    const r=await fetchWithTimeout(API_BASE + '/reset',{method:'POST'});const d=await r.json();
     if(d.state){S=d.state;render();log.innerHTML='';
       addPlain('Pick a round count to start a new match.','hint');}
   }catch(e){addPlain('Server error: '+e,'warn')}
@@ -948,7 +947,7 @@ $('ask').onsubmit=async ev=>{
   const historyAtAsk = tutorHistory.slice();
   tutorHistory.push({role:'user',content:t});
   try{
-    const r=await fetchWithTimeout('/ask',{method:'POST',headers:{'Content-Type':'application/json'},
+    const r=await fetchWithTimeout(API_BASE + '/ask',{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({card_name:tutorCard.card_name, history:historyAtAsk, question:t})});
     const d=await r.json();
     if(d.error){addPlain(d.error,'warn');return}
@@ -961,10 +960,9 @@ $('ask').onsubmit=async ev=>{
   }catch(e){addPlain('Server error: '+e,'warn')}
 };
 
-/* ---------- STATE FETCH ---------- */
 async function fetchState(){
   try{
-    const r = await fetchWithTimeout('/status');
+    const r = await fetchWithTimeout(API_BASE + '/status');
     if(!r.ok){ throw new Error('HTTP '+r.status); }
     const d = await r.json();
     if(d && d.phase && d.phase !== 'pick_rounds'){
@@ -982,7 +980,6 @@ async function fetchState(){
   }
 }
 
-/* ---------- MODEL SELECTOR ---------- */
 async function openSettings() {
   const modal = $('settings-modal');
   modal.classList.add('on');
@@ -1001,7 +998,7 @@ async function refreshModelList() {
 
   let data;
   try {
-    const r = await fetchWithTimeout('/get_models');
+    const r = await fetchWithTimeout(API_BASE + '/get_models');
     if(!r.ok) throw new Error('HTTP ' + r.status);
     data = await r.json();
   } catch(e) {
@@ -1016,7 +1013,6 @@ async function refreshModelList() {
 
   curBox.innerHTML = 'Current model: <strong>' + escapeHtml(current) + '</strong>';
 
-  // Build a unified, de-duplicated list with source tags
   const seen = new Set();
   const entries = [];
   cloud.forEach(m => { if(m && !seen.has(m)) { seen.add(m); entries.push({name:m, source:'cloud'}); } });
@@ -1024,7 +1020,7 @@ async function refreshModelList() {
   if(!seen.has(current)) entries.push({name: current, source:'current'});
 
   if(entries.length === 0){
-    list.innerHTML = '<div class="model-list-empty">No models found. Make sure Ollama is running and has at least one model pulled.</div>';
+    list.innerHTML = '<div class="model-list-empty">No models found.</div>';
     return;
   }
 
@@ -1050,12 +1046,10 @@ async function refreshModelList() {
 }
 
 async function switchModel(name) {
-  const list = $('model-list');
   const curBox = $('current-model-box');
-  // Optimistic UI feedback
   curBox.innerHTML = 'Current model: <strong>switching to ' + escapeHtml(name) + '…</strong>';
   try {
-    const r = await fetch('/update_model', {
+    const r = await fetch(API_BASE + '/update_model', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({model: name})
