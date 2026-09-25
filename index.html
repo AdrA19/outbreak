@@ -247,6 +247,7 @@ body.shake .wrap{animation:shake .4s steps(8)}
 .feed-wrap #feed{
   filter:saturate(1.05) contrast(1.08) brightness(1.02);
   border-radius:12px;
+  object-fit:cover;
 }
 @keyframes crtflick{
   0%,97%,100%{opacity:1}
@@ -305,7 +306,7 @@ body.busy .feed-wrap::after{animation:none}
 <main class='wrap'>
   <section class='cam'>
     <div class='feed-wrap'>
-      <img id='feed' src='/api/video_feed' alt='camera'>
+      <video id='feed' autoplay playsinline muted></video>
       <div class='banner' id='banner'>Choose round count</div>
       <div class='overlay' id='overlay'><div class='spinner'></div><div id='overlay-txt'>Working…</div></div>
       <div class='coin-overlay' id='coin-overlay'>
@@ -720,22 +721,28 @@ async function learnAction(){
   hidePicker();
   if(!S)return;
   const ph=S.phase;
-  let url=null, pickUrl=null, role=null;
-  if(ph==='setup_p1'||ph==='setup_p2'){ url=API_BASE + '/learn_setup'; pickUrl=API_BASE + '/pick_setup'; role='setup'; }
-  else if(ph==='wild_p1'||ph==='wild_p2'){ url=API_BASE + '/learn_wild'; pickUrl=API_BASE + '/pick_wild'; role='wild'; }
-  if(!url)return;
+  let role=null;
+  if(ph==='setup_p1'||ph==='setup_p2'){ role='setup'; }
+  else if(ph==='wild_p1'||ph==='wild_p2'){ role='wild'; }
+  if(!role)return;
+
+  let blob;
+  try { blob = await grabClientFrame(); }
+  catch(e) { addPlain(e.message || 'Camera not ready.', 'warn'); return; }
 
   showOverlay('Scanning…');
   const cl=thinking('Scanning…');
   try{
-    const r=await fetchWithTimeout(url,{method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({})
+    const r=await fetchWithTimeout(API_BASE + '/scan_upload?role=' + role, {
+      method:'POST',
+      headers:{'Content-Type':'image/jpeg'},
+      body: blob
     });
     const d=await r.json();cl();hideOverlay();
     if(!d.matched){
       addPlain(d.message||'Card not recognized.','warn');
       if(d.needs_manual && d.available){
+        const pickUrl = role==='wild' ? API_BASE + '/pick_wild' : API_BASE + '/pick_setup';
         showPicker(d.available, async (short)=>{
           try{
             const rr=await fetchWithTimeout(pickUrl,{method:'POST',headers:{'Content-Type':'application/json'},
@@ -770,12 +777,18 @@ async function learnAction(){
 async function scanPlayAction(){
   hidePicker();
   if(!S || S.phase!=='match')return;
+
+  let blob;
+  try { blob = await grabClientFrame(); }
+  catch(e) { addPlain(e.message || 'Camera not ready.', 'warn'); return; }
+
   showOverlay('Scanning…');
   const cl=thinking('Scanning…');
   try{
-    const r=await fetchWithTimeout(API_BASE + '/scan_play',{method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({})
+    const r=await fetchWithTimeout(API_BASE + '/scan_upload?role=play', {
+      method:'POST',
+      headers:{'Content-Type':'image/jpeg'},
+      body: blob
     });
     const d=await r.json();cl();hideOverlay();
     if(!d.matched){
@@ -1072,11 +1085,71 @@ function escapeHtml(s){
   return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
 
+/* ---------- CLIENT CAMERA ---------- */
+let clientStream = null;
+
+async function initCamera() {
+  const video = document.getElementById('feed');
+
+  if (!window.isSecureContext) {
+    console.warn('Camera requires a secure context (HTTPS or localhost).');
+    return;
+  }
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    console.warn('Browser does not support getUserMedia.');
+    return;
+  }
+
+  try {
+    clientStream = await navigator.mediaDevices.getUserMedia({
+      video: {
+        facingMode: { ideal: 'environment' },
+        width:  { ideal: 1280 },
+        height: { ideal: 720 },
+      },
+      audio: false,
+    });
+    video.srcObject = clientStream;
+    await video.play().catch(() => {});
+    console.log('Camera ready.');
+  } catch (err) {
+    console.error('Camera error:', err.name, err.message);
+    if (err.name === 'NotAllowedError') {
+      setBanner('Camera permission denied — tap the lock icon and allow');
+    } else if (err.name === 'NotFoundError') {
+      setBanner('No camera found on this device');
+    } else if (err.name === 'NotReadableError') {
+      setBanner('Camera in use by another app');
+    } else {
+      setBanner('Camera error: ' + err.name);
+    }
+  }
+}
+
+async function grabClientFrame() {
+  const video = document.getElementById('feed');
+  if (!video.videoWidth) {
+    throw new Error('Camera not ready yet — wait a moment and try again.');
+  }
+  const canvas = document.createElement('canvas');
+  canvas.width  = video.videoWidth;
+  canvas.height = video.videoHeight;
+  canvas.getContext('2d').drawImage(video, 0, 0);
+  return await new Promise((resolve, reject) => {
+    canvas.toBlob(
+      b => b ? resolve(b) : reject(new Error('toBlob failed')),
+      'image/jpeg',
+      0.85
+    );
+  });
+}
+
 /* ---------- BOOT ---------- */
 setupPanel.classList.add('on');
 setBanner('Choose round count');
 renderChoices();
 fetchState();
+initCamera();
 
 (function(){
   const canvas=document.getElementById('cellcanvas');if(!canvas)return;
